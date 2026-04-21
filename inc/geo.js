@@ -198,6 +198,10 @@ class Geo {
         
         // Nettoyage avant de charger de nouveaux points
         this.layers.stops.clearLayers();
+        // Masquer la boîte d'alerte au début du chargement ; elle sera affichée
+        // seulement si aucun arrêt n'est trouvé.
+        const $boxAlert = document.querySelector('.box-alert');
+        if ($boxAlert) $boxAlert.classList.add('hidden');
         
         const { latitude, longitude } = position.coords;
 
@@ -211,9 +215,11 @@ class Geo {
             if (data.results && data.results.length > 0) {
                 // Pour chaque arrêt trouvé par l'API, on crée son marqueur
                 data.results.forEach(stop => this._renderStopMarker(stop));
+                // S'il y avait un message d'alerte visible, on le masque
+                if ($boxAlert) $boxAlert.classList.add('hidden');
             } else {
                 // Si aucun arrêt, on affiche notre message d'alerte HTML
-                document.querySelector('.box-alert').classList.remove('hidden');
+                if ($boxAlert) $boxAlert.classList.remove('hidden');
             }
         } catch (error) {
             console.error("Erreur lors de la récupération des arrêts :", error);
