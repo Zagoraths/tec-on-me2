@@ -34,8 +34,11 @@ class Geo {
         this.layers = {
             stops: L.layerGroup(),   // Pour les icônes d'arrêts de bus
             route: L.layerGroup(),   // Pour le tracé rouge du bus
+            click: L.layerGroup(),   // Pour le marqueur créé par clic
         };
         this.activeMarker = null; // Pour stocker le marqueur de la position cliquée (si besoin)
+        this.userMarker = null; // Marqueur de la position de l'utilisateur (ne doit jamais disparaître)
+        this.clickMarker = null; // Marqueur du dernier clic sur la carte
 
         // Écouteur global pour les lignes de bus (Délégation d'événement)
         // On écoute la zone de la carte : si on clique sur un lien avec la classe 'bus-link', on trace la ligne.
@@ -76,7 +79,8 @@ class Geo {
             stop: L.icon({ ...configCommune, iconUrl: './icons/icon-map-bus-stop.svg' }),
             start: L.icon({ ...configCommune, iconUrl: './icons/icon-map-bus-start.svg' }),
             end: L.icon({ ...configCommune, iconUrl: './icons/icon-map-bus-end.svg' }),
-            user: L.icon({ ...configCommune, iconUrl: './icons/icon-map-user-location.svg' })
+            user: L.icon({ ...configCommune, iconUrl: './icons/icon-map-user-location.svg' }),
+            click: L.icon({ ...configCommune, iconUrl: './icons/icon-me.svg' })
         };
     }
 
@@ -119,6 +123,14 @@ class Geo {
     // Permet de changer le rayon de recherche (ex: via le curseur range)
     setDistance(km) {
         this.distance = km;
+        // Recharger dynamiquement les arrêts visibles selon le contexte courant
+        // Si un pin de clic existe, on recharge autour de ce pin, sinon autour de la position courante
+        if (this.clickMarker && this.clickMarker.getLatLng) {
+            const latlng = this.clickMarker.getLatLng();
+            this.loadStops({ coords: { latitude: latlng.lat, longitude: latlng.lng } });
+        } else if (this.lastPosition) {
+            this.loadStops(this.lastPosition);
+        }
     }
 
     /**
@@ -143,12 +155,38 @@ class Geo {
         // On active nos "tiroirs" (calques) sur la carte
         this.layers.stops.addTo(this.map);
         this.layers.route.addTo(this.map);
+        this.layers.click.addTo(this.map);
 
         // Marqueur fixe pour notre position initiale
-        L.marker([latitude, longitude], { icon: this.icons.user }).addTo(this.map);
+        this.userMarker = L.marker([latitude, longitude], { icon: this.icons.user }).addTo(this.map);
 
         // On charge les arrêts autour de nous
         this.loadStops(position);
+        
+        // Gestion du clic sur la carte : pose d'un pin et chargement des arrêts autour de ce pin
+        this.map.on('click', (e) => this._onMapClick(e.latlng));
+    }
+
+    /**
+     * Clic sur la carte : création d'un pin, suppression de l'ancien et chargement
+     * des arrêts autour du point cliqué. La position utilisateur (this.userMarker)
+     * n'est jamais supprimée.
+     */
+    _onMapClick(latlng) {
+        // Supprimer l'ancien marqueur de clic
+        if (this.clickMarker) {
+            this.layers.click.removeLayer(this.clickMarker);
+            this.clickMarker = null;
+        }
+
+        // Créer le nouveau marqueur de clic
+        this.clickMarker = L.marker([latlng.lat, latlng.lng], { icon: this.icons.click }).addTo(this.layers.click);
+
+        // Mettre à jour lastPosition pour que les distances des arrêts soient calculées depuis le pin cliqué
+        const fakePosition = { coords: { latitude: latlng.lat, longitude: latlng.lng } };
+
+        // Charger les arrêts autour du point cliqué (cela efface automatiquement les arrêts précédents)
+        this.loadStops(fakePosition, true);
     }
 
     /**
