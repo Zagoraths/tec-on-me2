@@ -1,6 +1,7 @@
 // gestion de la carte
 import {Geo} from './inc/geo.js'
 //Gestion du bouton d'installation
+import './inc/install.js'
 
 //gestion des fermetures des boxes
 import boxClose from './inc/box.js'

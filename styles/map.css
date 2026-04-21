@@ -1,6 +1,6 @@
 /* CSS pour la carte */
 #map { 
-    height: 90vh;
+    height: 100vh;
     border: 1px solid black;
     transition: all 2s;
  }
