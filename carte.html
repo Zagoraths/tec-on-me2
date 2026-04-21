@@ -24,6 +24,12 @@
   <body>
     <main>
       <div class="page">
+        <!-- Contrôle de distance (slider) à côté des contrôles de zoom Leaflet -->
+        <div class="distance-control" aria-label="Rayon de recherche">
+          <label for="distance" id="distance-label" class="sr-only">Rayon de recherche (km)</label>
+          <input id="distance" type="range" min="0.2" max="5" step="0.1" value="1" />
+          <div id="distance-value">1 km</div>
+        </div>
         <div class="box box-install backface-hidden">
           <span class="cross close">×</span>
           <div class="box-content">

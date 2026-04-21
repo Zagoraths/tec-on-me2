@@ -39,6 +39,30 @@
     box-shadow: 9px 4px 35px 0px #FFD60099;
     backdrop-filter: blur(8px)
 }
+/* Contrôle de distance (slider) placé à côté des boutons de zoom */
+.distance-control {
+    position: absolute;
+    bottom: 2rem;
+    left: 4.8rem; /* placé légèrement à droite des contrôles de zoom */
+    background: rgba(255,255,255,0.8);
+    padding: 6px 8px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1000;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+.distance-control input[type="range"] {
+    width: 140px;
+}
+.distance-control #distance-value {
+    font-size: 0.9rem;
+    color: #333;
+    min-width: 48px;
+    text-align: center;
+}
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 /* CSS pour les boxes */
 .box {
     border: none;
