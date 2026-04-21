@@ -256,11 +256,45 @@ class Geo {
         const response = await fetch(`${this.urlApi}/bus/${stop.stop_name}/${stop.coordinates.lon}`);
         const data = await response.json();
         
-        let busHtml = "";
-        if (data.code === "ok") {
+        // Construire dynamiquement la liste des lignes (un item par bus)
+        // et créer un bouton de favori par ligne (shape_id).
+        const busListEl = document.createElement('div');
+        busListEl.className = 'bus-list';
+        let stopShapeId = null;
+        if (data.code === 'ok') {
             data.content.forEach(bus => {
                 if (bus.route_id) {
-                    busHtml += `<a href="#" class="bus-link" data-shape="${bus.shape_id}">${bus.route_short_name} - ${bus.route_long_name}</a><br>`;
+                    const item = document.createElement('div');
+                    item.className = 'bus-item';
+
+                    const a = document.createElement('a');
+                    a.href = '#';
+                    a.className = 'bus-link';
+                    a.dataset.shape = bus.shape_id;
+                    a.textContent = `${bus.route_short_name} - ${bus.route_long_name}`;
+
+                    item.appendChild(a);
+
+                    // Bouton favori spécifique à cette ligne (shape_id)
+                    if (bus.shape_id) {
+                        const shapeId = String(bus.shape_id);
+                        if (!stopShapeId) stopShapeId = shapeId;
+                        const lineFavBtn = document.createElement('button');
+                        lineFavBtn.className = 'fav-btn';
+                        lineFavBtn.textContent = this.isFavorite(shapeId) ? 'Favori ajouté' : 'Ajouter aux favoris';
+                        lineFavBtn.disabled = this.isFavorite(shapeId);
+                        lineFavBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            const added = this.addFavorite(shapeId);
+                            if (added) {
+                                lineFavBtn.textContent = 'Favori ajouté';
+                                lineFavBtn.disabled = true;
+                            }
+                        });
+                        item.appendChild(lineFavBtn);
+                    }
+
+                    busListEl.appendChild(item);
                 }
             });
         }
@@ -271,8 +305,10 @@ class Geo {
             <span class="close-panel">&times;</span>
             <h4>${stop.stop_name}</h4>
             <hr>
-            <div class="bus-list">${busHtml}</div>
         `;
+
+        // Insérer la liste des lignes (avec boutons favori) dans le panneau
+        $panel.appendChild(busListEl);
 
         // 3. Affichage (en retirant la classe hidden)
         $panel.classList.remove('hidden');
@@ -368,6 +404,71 @@ class Geo {
             const h4 = $panel.querySelector('h4');
             if (h4) h4.insertAdjacentHTML('afterend', summaryHtml);
             else $panel.insertAdjacentHTML('beforeend', summaryHtml);
+        }
+    }
+
+    /* ---------------------------------------------
+     * FAVORITES (localStorage)
+     * Fonctions utilitaires pour gérer la liste des
+     * arrêts favoris dans localStorage sans doublons.
+     * Key utilisée : 'tec_on_me_favorites'
+     * --------------------------------------------- */
+
+    // Retourne le tableau des favoris (ids) depuis localStorage
+    _getFavorites() {
+        try {
+            const raw = localStorage.getItem('tec_on_me_favorites');
+            if (!raw) return [];
+            return JSON.parse(raw);
+        } catch (e) {
+            console.warn('Impossible de lire les favoris depuis localStorage', e);
+            return [];
+        }
+    }
+
+    // Sauvegarde le tableau d'ids en localStorage
+    _saveFavorites(arr) {
+        try {
+            localStorage.setItem('tec_on_me_favorites', JSON.stringify(arr));
+            return true;
+        } catch (e) {
+            console.warn('Impossible de sauvegarder les favoris', e);
+            return false;
+        }
+    }
+
+    // Retourne true si l'id est déjà en favoris
+    isFavorite(id) {
+        if (!id) return false;
+        const fav = this._getFavorites();
+        return fav.indexOf(id) !== -1;
+    }
+
+    // Ajoute un id aux favoris si non présent (évite les doublons)
+    // Retourne true si ajouté, false si déjà présent ou erreur
+    addFavorite(id) {
+        if (!id) return false;
+        const fav = this._getFavorites();
+        if (fav.indexOf(id) !== -1) return false; // déjà
+        fav.push(id);
+        return this._saveFavorites(fav);
+    }
+
+    // Génère un identifiant unique pour un arrêt reçu de l'API
+    // Utilise un champ existant si présent, sinon fallback sur le nom+coords
+    _getStopId(stop) {
+        // Plusieurs APIs peuvent exposer des identifiants différents
+        if (!stop) return null;
+        if (stop.recordid) return String(stop.recordid);
+        if (stop.id) return String(stop.id);
+        // fallback : compose un id à partir du nom et des coordonnées
+        try {
+            const name = stop.stop_name ? stop.stop_name.replace(/\s+/g, '_') : 'stop';
+            const lat = stop.coordinates && stop.coordinates.lat ? stop.coordinates.lat : '0';
+            const lon = stop.coordinates && stop.coordinates.lon ? stop.coordinates.lon : '0';
+            return `${name}_${lat}_${lon}`;
+        } catch (e) {
+            return null;
         }
     }
 
