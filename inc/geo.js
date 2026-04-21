@@ -350,20 +350,17 @@ class Geo {
         const $panel = document.querySelector('#info-panel');
         if ($panel) {
             const dist = route.distance; // en mètres
-            const dur = route.duration; // en secondes
             const distText = dist >= 1000 ? (dist/1000).toFixed(1) + ' km' : Math.round(dist) + ' m';
-            const mins = Math.floor(dur / 60);
-            const secs = Math.round(dur % 60);
-            const timeText = mins > 0 ? `${mins} min ${secs} s` : `${secs} s`;
-            // Estimation basée sur une vitesse fournie (par défaut 4 km/h)
+
+            // On conserve l'estimation interne et on affiche aussi la durée estimée
             const estimatedSeconds = this._estimateWalkingTime(dist, 4);
             stop.estimated_walk_seconds = estimatedSeconds;
             const estMins = Math.floor(estimatedSeconds / 60);
             const estSecs = Math.round(estimatedSeconds % 60);
             const estText = estMins > 0 ? `${estMins} min ${estSecs} s` : `${estSecs} s`;
 
-            // Ajoute/injecte une petite ligne récap sous le titre
-            const summaryHtml = `<div class="walk-summary">À pied (OSRM) : <strong>${distText}</strong> — <strong>${timeText}</strong><br>Estimation (4 km/h) : <strong>${estText}</strong></div>`;
+            // Ajoute/injecte une petite ligne récap sous le titre (distance + estimation 4 km/h)
+            const summaryHtml = `<div class="walk-summary">À pied : <strong>${distText}</strong> — Estimation (4 km/h) : <strong>${estText}</strong></div>`;
             // Si un élément summary existe déjà, on le remplace
             const existing = $panel.querySelector('.walk-summary');
             if (existing) existing.remove();
