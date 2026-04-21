@@ -164,6 +164,8 @@ class Geo {
 
         // On charge les arrêts autour de nous
         this.loadStops(position);
+    // Préparer le panneau des favoris (UI)
+    this.renderFavoritesPanel();
         
         // Gestion du clic sur la carte : pose d'un pin et chargement des arrêts autour de ce pin
         this.map.on('click', (e) => this._onMapClick(e.latlng));
@@ -281,14 +283,19 @@ class Geo {
                         if (!stopShapeId) stopShapeId = shapeId;
                         const lineFavBtn = document.createElement('button');
                         lineFavBtn.className = 'fav-btn';
-                        lineFavBtn.textContent = this.isFavorite(shapeId) ? 'Favori ajouté' : 'Ajouter aux favoris';
-                        lineFavBtn.disabled = this.isFavorite(shapeId);
+                        // Affiche un texte contextualisé : supprimer si déjà en favori, sinon ajouter
+                        lineFavBtn.textContent = this.isFavorite(shapeId) ? 'Retirer des favoris' : 'Ajouter aux favoris';
+                        // Ne pas désactiver : on permet le toggle (ajout / suppression)
                         lineFavBtn.addEventListener('click', (e) => {
                             e.preventDefault();
-                            const added = this.addFavorite(shapeId);
-                            if (added) {
-                                lineFavBtn.textContent = 'Favori ajouté';
-                                lineFavBtn.disabled = true;
+                            const result = this.toggleFavorite(shapeId);
+                            if (result === 'added') {
+                                lineFavBtn.textContent = 'Retirer des favoris';
+                            } else if (result === 'removed') {
+                                lineFavBtn.textContent = 'Ajouter aux favoris';
+                            } else {
+                                // en cas d'erreur, garder l'état précédent
+                                console.warn('Impossible de basculer le favori pour', shapeId);
                             }
                         });
                         item.appendChild(lineFavBtn);
@@ -451,7 +458,187 @@ class Geo {
         const fav = this._getFavorites();
         if (fav.indexOf(id) !== -1) return false; // déjà
         fav.push(id);
-        return this._saveFavorites(fav);
+        const saved = this._saveFavorites(fav);
+        // Mettre à jour le panneau si il est affiché
+        if (saved && this._favoritesPanel) this.updateFavoritesPanel();
+        return saved;
+    }
+
+    // Supprime un id des favoris s'il existe.
+    // Retourne true si supprimé, false si absent ou erreur.
+    removeFavorite(id) {
+        if (!id) return false;
+        const fav = this._getFavorites();
+        const idx = fav.indexOf(id);
+        if (idx === -1) return false; // pas présent
+        fav.splice(idx, 1);
+        const saved = this._saveFavorites(fav);
+        if (saved && this._favoritesPanel) this.updateFavoritesPanel();
+        return saved;
+    }
+
+    // Bascule l'état favoris d'un id : ajoute si absent, supprime s'il est présent.
+    // Retourne 'added' | 'removed' | false (en cas d'erreur).
+    toggleFavorite(id) {
+        if (!id) return false;
+        if (this.isFavorite(id)) {
+            const removed = this.removeFavorite(id);
+            return removed ? 'removed' : false;
+        } else {
+            const added = this.addFavorite(id);
+            return added ? 'added' : false;
+        }
+    }
+
+    /* ------------------------------------------------------------------
+     * FAVORITES PANEL UI
+     * Fonctions pour créer et mettre à jour une vue liste des favoris.
+     * - renderFavoritesPanel() : crée le panneau et le bouton d'ouverture
+     * - updateFavoritesPanel() : met à jour le contenu en lisant localStorage
+     * - _handleFavoriteSelect(id) : gère le clic sur un favori (affiche la ligne)
+     *
+     * Ces fonctions sont appelées automatiquement lorsque l'utilisateur
+     * ajoute/retire un favori (on rafraîchit la liste si le panneau existe).
+     * ------------------------------------------------------------------ */
+
+    // Crée le panneau de favoris et le bouton pour l'ouvrir (appelé à la demande)
+    renderFavoritesPanel() {
+        // Si déjà créé, ne rien faire
+        if (this._favoritesPanel) return;
+
+        // Conteneur principal
+        const panel = document.createElement('div');
+        panel.className = 'favorites-panel';
+        // Styles minimaux pour être fonctionnel sans modifier les CSS externes
+        Object.assign(panel.style, {
+            position: 'fixed',
+            right: '1rem',
+            bottom: '6rem',
+            width: '260px',
+            maxHeight: '50vh',
+            overflow: 'auto',
+            background: 'white',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.12)',
+            borderRadius: '8px',
+            padding: '8px',
+            zIndex: 2000,
+            display: 'none'
+        });
+
+        // Titre
+        const h = document.createElement('h3');
+        h.textContent = 'Favoris';
+        h.style.margin = '0 0 8px 0';
+        panel.appendChild(h);
+
+        // Liste
+        const ul = document.createElement('ul');
+        ul.className = 'favorites-list';
+        ul.style.listStyle = 'none';
+        ul.style.padding = '0';
+        ul.style.margin = '0';
+        panel.appendChild(ul);
+
+        // Fermer
+        const close = document.createElement('button');
+        close.textContent = 'Fermer';
+        Object.assign(close.style, { marginTop: '8px', width: '100%' });
+        close.addEventListener('click', () => { panel.style.display = 'none'; });
+        panel.appendChild(close);
+
+        document.body.appendChild(panel);
+        this._favoritesPanel = panel;
+
+        // Bouton flottant pour afficher/masquer le panneau
+        const toggle = document.createElement('button');
+        toggle.className = 'favorites-toggle';
+        toggle.textContent = '★ Favoris';
+        Object.assign(toggle.style, {
+            position: 'fixed',
+            right: '1rem',
+            bottom: '1rem',
+            zIndex: 2000,
+            padding: '8px 10px',
+            borderRadius: '8px',
+            background: '#FFD600',
+            border: 'none',
+            cursor: 'pointer'
+        });
+        toggle.addEventListener('click', () => {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            // Lorsqu'on ouvre, rafraîchir le contenu
+            if (panel.style.display === 'block') this.updateFavoritesPanel();
+        });
+        document.body.appendChild(toggle);
+        this._favoritesToggle = toggle;
+    }
+
+    // Met à jour la liste des favoris dans le panneau (doit exister)
+    updateFavoritesPanel() {
+        if (!this._favoritesPanel) return;
+        const ul = this._favoritesPanel.querySelector('.favorites-list');
+        if (!ul) return;
+        // Vider
+        ul.innerHTML = '';
+
+        const fav = this._getFavorites();
+        if (!fav || fav.length === 0) {
+            const li = document.createElement('li');
+            li.textContent = 'Aucun favori';
+            li.style.padding = '6px 0';
+            ul.appendChild(li);
+            return;
+        }
+
+        fav.forEach(id => {
+            const li = document.createElement('li');
+            li.style.display = 'flex';
+            li.style.justifyContent = 'space-between';
+            li.style.alignItems = 'center';
+            li.style.padding = '6px 0';
+
+            const a = document.createElement('a');
+            a.href = '#';
+            a.textContent = id;
+            a.style.flex = '1';
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                this._handleFavoriteSelect(id);
+            });
+
+            const del = document.createElement('button');
+            del.textContent = '×';
+            del.title = 'Supprimer';
+            del.style.marginLeft = '8px';
+            del.addEventListener('click', (e) => {
+                e.preventDefault();
+                const removed = this.removeFavorite(id);
+                if (removed) this.updateFavoritesPanel();
+            });
+
+            li.appendChild(a);
+            li.appendChild(del);
+            ul.appendChild(li);
+        });
+    }
+
+    // Gère la sélection d'un favori : affiche la ligne correspondante
+    // et s'assure que la ligne précédente disparaisse (drawRoute efface le calque route).
+    _handleFavoriteSelect(id) {
+        if (!id) return;
+        // Afficher la ligne (shapeId)
+        this.drawRoute(id);
+        // Mettre en avant l'élément sélectionné dans la liste si panel visible
+        if (this._favoritesPanel) {
+            // retirer la classe 'selected' des autres
+            const items = this._favoritesPanel.querySelectorAll('.favorites-list li');
+            items.forEach(li => li.classList.remove('selected'));
+            // trouver l'élément correspondant
+            const anchors = this._favoritesPanel.querySelectorAll('.favorites-list a');
+            anchors.forEach(a => {
+                if (a.textContent === id) a.parentElement.classList.add('selected');
+            });
+        }
     }
 
     // Génère un identifiant unique pour un arrêt reçu de l'API
