@@ -1,0 +1,6 @@
+/* import des CSS Leaflet */
+@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+/* import CSS de la home page **/
+@import "home.css";
+/* Import CSS pour la carte */
+@import "map.css";

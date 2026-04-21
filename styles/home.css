@@ -1,0 +1,143 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:slnt,wght@-10..0,100..900&display=swap");
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #000E;
+}
+
+.phone {
+  max-width: 25rem;
+  margin: 0 auto;
+}
+
+.wrapper {
+  min-height: calc(100dvh);
+  font-family: "inter", sans-serif;
+  display: grid;
+  height: 100%;
+  justify-content: center;
+  grid-template-columns: 1fr;
+  align-content: center;
+  justify-items: center;
+  background: linear-gradient(135deg, #F5F5F2 11.07%, #E7E4E1 46.52%);
+}
+
+.big {
+  justify-self: center;
+  margin-block: 2rem -2rem;
+}
+
+.gps_form {
+  font-family: Inter;
+  display: grid;
+}
+.gps_form h1 {
+  margin-left: clamp(1.7rem, 4vw, 3rem);
+  margin-block: 3rem;
+  color: #000C;
+  font-family: Inter;
+  font: 640 1.625rem/1 "Inter";
+  letter-spacing: -0.065rem;
+  display: grid;
+}
+.gps_form__field {
+  display: grid;
+  grid-template-columns: clamp(3rem, 15vw, 4rem) clamp(6rem, 50vw, 12rem) 1.7fr;
+  align-content: center;
+  grid-template-rows: auto auto;
+  margin-block: 0.8rem;
+  transition: all 0.4s;
+}
+.gps_form__field label {
+  color: #000C;
+  font-size: 1.1875rem;
+  font-style: normal;
+  font-weight: 550;
+  line-height: 1.375rem;
+  /* 115.789% */
+  letter-spacing: -0.0475rem;
+  align-self: end;
+  display: grid;
+}
+.gps_form__field p {
+  margin-block: 0.8rem;
+  display: grid;
+  color: #0007;
+  line-height: 1.4;
+  font-variation-settings: "wght" 280;
+}
+.gps_form__field input, .gps_form__field img {
+  grid-row: 1/3;
+}
+.gps_form__field input {
+  grid-column: 1/2;
+}
+.gps_form__field img {
+  grid-column: 3/4;
+}
+.gps_form__field p, .gps_form__field label {
+  grid-column: 2/3;
+}
+.gps_form__field img {
+  align-self: start;
+  justify-self: start;
+  margin-block-start: -0.5rem;
+  margin-inline-start: -0.8rem;
+}
+.gps_form__field input {
+  --size-check: 2rem;
+  margin-inline-end: 1rem;
+  justify-self: end;
+  align-self: start;
+  width: var(--size-check);
+  height: var(--size-check);
+  box-shadow: inset 0 0 0 2px #000C;
+  border-radius: 4rem;
+  appearance: none;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+}
+.gps_form__field input::before {
+  --size-check: 2rem;
+  background: #0000;
+  content: "";
+  border-radius: var(--size-check);
+  width: var(--size-check);
+  height: var(--size-check);
+  transition: all 0.5s;
+}
+.gps_form__field input:checked::before {
+  --size-check: .8rem;
+  background: #000C;
+}
+.gps_form button {
+  border-radius: 1rem;
+  padding: 1.2rem 5rem;
+  margin: 3rem auto 0;
+  border: none;
+  background: #0002;
+  color: #0003;
+  transition: all 0.6s;
+}
+
+form:has(:checked) div ~ button {
+  background: #FFD600;
+  color: #000C;
+}
+
+form:has(#gps-on:checked) div:has(#gps-off) {
+  opacity: 0.2;
+}
+
+form:has(#gps-off:checked) div:has(#gps-on) {
+  opacity: 0.2;
+}
+
+form:has(input:checked) input:not(:checked)::before {
+  --size-check: .2rem;
+  transition: all 2s;
+}

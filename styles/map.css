@@ -1,0 +1,187 @@
+/* CSS pour la carte */
+#map { 
+    height: 90vh;
+    border: 1px solid black;
+    transition: all 2s;
+ }
+.page {
+    font-family: "inter", sans-serif;
+}
+#map.hidde {
+    opacity: 0;
+    border: none;
+ }
+.hidden {
+    display: none;
+}
+
+
+.leaflet-top {
+    bottom: 0 !important;
+}
+.leaflet-control-zoom, .leaflet-touch .leaflet-bar {
+    border: none;
+    position: absolute;
+    bottom: 2rem;
+    left: 1rem;
+}
+
+.leaflet-control-zoom a {
+    /* Component 12 */
+    margin-bottom: .5rem;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 6.652px !important;
+    color: rgba(51, 51, 51, 0.56);
+    box-shadow: 0px 14px 49px 0px #8B8CB269;
+    box-shadow: -6px -7px 23px 0px #F804043B;
+    box-shadow: 9px 4px 35px 0px #FFD60099;
+    backdrop-filter: blur(8px)
+}
+/* CSS pour les boxes */
+.box {
+    border: none;
+    padding: 1rem;
+    position: absolute;
+    width: 66%;
+    min-height: 5rem;
+    z-index: 1000;
+    background-color: white;
+    margin: 24% 0 0 13%;
+    border-radius: 16px;
+    box-shadow: 0px 14px 49px 0px #8B8CB269;
+    box-shadow: -6px -7px 23px 0px #F804043B;
+    box-shadow: 9px 4px 35px 0px #FFD60099;
+    backdrop-filter: blur(8px)
+}
+.box-install {
+    margin-top: 15%;
+}
+.close {
+    width: 1rem;
+    cursor: pointer;
+}
+.box-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.install-btn {
+    background-color: #FFD600;
+    border: none;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: 16px;
+    margin-top: 1rem;
+}
+.geo-btn2 {
+    position: absolute;
+    z-index:1000;
+    right:2rem;
+}
+button:hover {
+    opacity: .5;
+}
+/* CSS de classes **/
+.error {
+    color: red;
+}
+.hidden {
+    display: none;
+}
+a.bus-link {
+    font-size: 1.2rem;
+    line-height: 1.8rem;
+    display: block;
+}
+/* Le conteneur principal de la popup */
+/* On neutralise les transformations de Leaflet sur la popup */
+/* On cible le conteneur de la popup pour le déraciner du mouvement de la carte */
+/* 1. On cible le conteneur pour annuler les coordonnées de Leaflet */
+.leaflet-popup {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    /* On force le retour à l'origine de l'écran, pas de la carte */
+    transform: translate(0, 0) !important; 
+    margin: 0 !important;
+    width: 100vw !important;
+}
+
+/* 2. On s'assure que l'enveloppe interne n'a pas de marges parasites */
+.leaflet-popup-content-wrapper {
+    width: 100vw !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    /* Animation de glisse */
+    animation: slideDown 0.4s ease-out;
+}
+
+/* 3. On neutralise le conteneur de message interne */
+.leaflet-popup-content {
+    width: auto !important;
+    margin: 15px !important;
+    box-sizing: border-box;
+}
+
+/* 4. On supprime la flèche */
+.leaflet-popup-tip-container {
+    display: none !important;
+}
+
+@keyframes slideDown {
+    from { transform: translateY(-100%); }
+    to { transform: translateY(0); }
+}
+
+#distance-value {
+    color: white;
+}
+
+.info-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    background-color: white;
+    z-index: 10000;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    box-sizing: border-box;
+    
+    /* L'ANIMATION */
+    /* On part d'une position normale (0) */
+    transform: translateY(0); 
+    /* Transition fluide : 0.4 seconde avec un effet de ralentissement à la fin */
+    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Quand la classe 'hidden' est ajoutée, on remonte le panneau */
+.info-panel.hidden {
+    display: block !important; /* On force l'affichage pour que l'animation soit visible */
+    transform: translateY(-105%); /* On le cache au-dessus (le 5% de marge évite de voir l'ombre) */
+}
+
+.close-panel {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 30px;
+    cursor: pointer;
+    line-height: 1;
+    color: #B12A34;
+}
+
+/* On stylise un peu le contenu à l'intérieur */
+.info-panel h4 { margin: 0 0 10px 0; color: #333; }
+.info-panel p { margin: 5px 0; font-size: 0.9em; }
+
+/* L'icône du marqueur cliqué */
+.marker-active {
+    filter: hue-rotate(180deg);
+    transition: filter 0.5s ease;
+    z-index: 1000 !important; /* Pour qu'il passe au-dessus des autres */
+}

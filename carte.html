@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Tec on Me !</title>
+		<link rel="icon" href="/icons/favicon.ico" />
+		<meta name="theme-color" content="#B12A34" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="#B12A34" />
+		<script
+			defer
+			src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+			integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+			crossorigin=""
+		></script>
+		<script defer type="module" src="main.js"></script>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Inter:slnt,wght@-10..0,100..900&display=swap"
+			rel="stylesheet"
+		/>
+		<link rel="stylesheet" href="styles/style.css" />
+	</head>
+	<body>
+		<main>
+			<div class="page">
+				<div class="box box-install backface-hidden">
+					<span class="cross close">×</span>
+					<div class="box-content">
+						<p>Simplifie-toi la vie,<br /><strong>Installe l'app !</strong></p>
+						<div class="">
+							<button class="install-btn">Installer</button>
+						</div>
+					</div>
+				</div>
+				<div class="box box-alert hidden">
+					<span class="cross close">×</span>
+					<img src="" alt="" />
+					<p class="alert-message">
+						<strong>Pas d'arrêt autour de vous</strong> Déplacez-vous !!
+					</p>
+				</div>
+				<div id="info-panel" class="info-panel hidden"></div>
+				<div id="map"></div>
+			</div>
+		</main>
+	</body>
+</html>
