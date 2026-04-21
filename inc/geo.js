@@ -35,6 +35,7 @@ class Geo {
             stops: L.layerGroup(),   // Pour les icônes d'arrêts de bus
             route: L.layerGroup(),   // Pour le tracé rouge du bus
             click: L.layerGroup(),   // Pour le marqueur créé par clic
+            walking: L.layerGroup(), // Pour le tracé à pied (OSRM)
         };
         this.activeMarker = null; // Pour stocker le marqueur de la position cliquée (si besoin)
         this.userMarker = null; // Marqueur de la position de l'utilisateur (ne doit jamais disparaître)
@@ -156,6 +157,7 @@ class Geo {
         this.layers.stops.addTo(this.map);
         this.layers.route.addTo(this.map);
         this.layers.click.addTo(this.map);
+    this.layers.walking.addTo(this.map);
 
         // Marqueur fixe pour notre position initiale
         this.userMarker = L.marker([latitude, longitude], { icon: this.icons.user }).addTo(this.map);
@@ -275,6 +277,16 @@ class Geo {
         // 3. Affichage (en retirant la classe hidden)
         $panel.classList.remove('hidden');
 
+        // 5. Tracer le trajet à pied depuis la position utilisateur jusqu'à cet arrêt
+        // On utilise OSRM public : router.project-osrm.org
+        try {
+            await this._drawWalkingRoute(stop);
+            // Après tracé, extraire distance/durée si disponible
+            // L'info sera ajoutée dans le panneau par _drawWalkingRoute
+        } catch (err) {
+            console.warn('OSRM route error', err);
+        }
+
         // 4. Gestion de la fermeture
         $panel.querySelector('.close-panel').addEventListener('click', () => {
             $panel.classList.add('hidden');
@@ -282,6 +294,98 @@ class Geo {
         });
     });
 }
+
+    /**
+     * Dessine un itinéraire piéton entre la position utilisateur et l'arrêt fourni.
+     * Utilise l'API OSRM publique (router.project-osrm.org).
+     * Ajoute la polyline au calque `walking` et met à jour le panneau d'infos
+     * avec la distance et la durée.
+     */
+    async _drawWalkingRoute(stop) {
+        // Déterminer la position de départ : préférence pour this.userMarker
+        let startLat, startLon;
+        if (this.userMarker && this.userMarker.getLatLng) {
+            const latlng = this.userMarker.getLatLng();
+            startLat = latlng.lat;
+            startLon = latlng.lng;
+        } else if (this.lastPosition && this.lastPosition.coords) {
+            startLat = this.lastPosition.coords.latitude;
+            startLon = this.lastPosition.coords.longitude;
+        } else {
+            throw new Error('Position utilisateur inconnue');
+        }
+
+        const endLat = stop.coordinates.lat;
+        const endLon = stop.coordinates.lon;
+
+        // Construire l'URL OSRM (walking profile)
+        const url = `https://router.project-osrm.org/route/v1/walking/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`;
+
+        // Nettoyer l'ancien tracé piéton
+        try {
+            this.layers.walking.clearLayers();
+        } catch (e) { /* noop */ }
+
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('OSRM response not ok');
+
+        const json = await res.json();
+        if (!json.routes || json.routes.length === 0) {
+            throw new Error('Aucune route trouvée');
+        }
+
+        const route = json.routes[0];
+        const coords = route.geometry.coordinates.map(c => [c[1], c[0]]); // [lat,lon]
+
+        // Dessiner la polyline (bleu) pour le trajet piéton
+        const line = L.polyline(coords, { color: '#007bff', weight: 5, opacity: 0.85 }).addTo(this.layers.walking);
+
+        // Ajuster la vue pour montrer le trajet (sans masquer la position utilisateur)
+        try {
+            const bounds = line.getBounds();
+            this.map.fitBounds(bounds, { padding: [50, 50] });
+        } catch (e) { /* noop */ }
+
+        // Mettre à jour le panneau d'infos avec distance et durée
+        const $panel = document.querySelector('#info-panel');
+        if ($panel) {
+            const dist = route.distance; // en mètres
+            const dur = route.duration; // en secondes
+            const distText = dist >= 1000 ? (dist/1000).toFixed(1) + ' km' : Math.round(dist) + ' m';
+            const mins = Math.floor(dur / 60);
+            const secs = Math.round(dur % 60);
+            const timeText = mins > 0 ? `${mins} min ${secs} s` : `${secs} s`;
+            // Estimation basée sur une vitesse fournie (par défaut 4 km/h)
+            const estimatedSeconds = this._estimateWalkingTime(dist, 4);
+            stop.estimated_walk_seconds = estimatedSeconds;
+            const estMins = Math.floor(estimatedSeconds / 60);
+            const estSecs = Math.round(estimatedSeconds % 60);
+            const estText = estMins > 0 ? `${estMins} min ${estSecs} s` : `${estSecs} s`;
+
+            // Ajoute/injecte une petite ligne récap sous le titre
+            const summaryHtml = `<div class="walk-summary">À pied (OSRM) : <strong>${distText}</strong> — <strong>${timeText}</strong><br>Estimation (4 km/h) : <strong>${estText}</strong></div>`;
+            // Si un élément summary existe déjà, on le remplace
+            const existing = $panel.querySelector('.walk-summary');
+            if (existing) existing.remove();
+            // Insérer après le h4 si présent sinon en bas
+            const h4 = $panel.querySelector('h4');
+            if (h4) h4.insertAdjacentHTML('afterend', summaryHtml);
+            else $panel.insertAdjacentHTML('beforeend', summaryHtml);
+        }
+    }
+
+    /**
+     * Estime le temps de marche en secondes pour une distance donnée (en mètres)
+     * selon une vitesse en km/h (par défaut 4 km/h).
+     * Retourne le temps estimé en secondes (arrondi).
+     */
+    _estimateWalkingTime(distanceMeters, speedKmh = 4) {
+        if (!distanceMeters || distanceMeters <= 0) return 0;
+        // vitesse en m/s = (km/h) * 1000 / 3600
+        const speedMs = (speedKmh * 1000) / 3600;
+        const seconds = Math.round(distanceMeters / speedMs);
+        return seconds;
+    }
 
 
     
