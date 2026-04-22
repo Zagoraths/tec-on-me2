@@ -61,6 +61,9 @@ class Geo {
     this._lastRouteRefreshAt = 0;    // timestamp pour throttling des requêtes OSRM
     this._lastFollowPos = null;      // position précédente lors du suivi (pour calculer déplacement)
     this._arrivalThreshold = 20;     // en mètres: distance pour considérer qu'on est arrivé
+    this._offRouteThreshold = 30;    // en mètres: si on s'écarte de la route on recalcul
+    this._currentWalkingCoords = null; // tableau [[lat,lon], ...] pour le dernier itinéraire
+    this._currentWalkingLine = null; // référence au polyline Leaflet affiché
 
         // Écouteur global pour les lignes de bus (Délégation d'événement)
         // On écoute la zone de la carte : si on clique sur un lien avec la classe 'bus-link', on trace la ligne.
@@ -117,7 +120,7 @@ class Geo {
             
             if (result.state === 'granted' || result.state === 'prompt') {
                 // Si autorisé, on demande la position précise au navigateur
-                navigator.geolocation.getCurrentPosition(
+                navigator.geolocation.watchPosition(
                     (pos) => this.createMap(pos), // Succès
                     (err) => this.errorPosition(err), // Erreur
                     this.optionsMap
@@ -381,6 +384,9 @@ class Geo {
         $panel.querySelector('.close-panel').addEventListener('click', () => {
             $panel.classList.add('hidden');
             this.layers.walking.clearLayers(); // On efface le tracé bleu aussi
+            // Clear cached walking geometry
+            this._currentWalkingCoords = null;
+            this._currentWalkingLine = null;
             // Si on était en suivi, on l'arrête (fermeture du panneau implique arrêt du suivi)
             if (this.following) this.stopFollow(false);
         });
@@ -424,6 +430,9 @@ class Geo {
         // Nettoyer l'ancien tracé piéton
         try {
             this.layers.walking.clearLayers();
+            // effacer la géométrie en cache pour éviter d'utiliser une route obsolète
+            this._currentWalkingCoords = null;
+            this._currentWalkingLine = null;
         } catch (e) { /* noop */ }
 
         const res = await fetch(url);
@@ -437,8 +446,11 @@ class Geo {
         const route = json.routes[0];
         const coords = route.geometry.coordinates.map(c => [c[1], c[0]]); // [lat,lon]
 
-        // Dessiner la polyline (bleu) pour le trajet piéton
-        const line = L.polyline(coords, { color: '#007bff', weight: 5, opacity: 0.85 }).addTo(this.layers.walking);
+    // Dessiner la polyline (bleu) pour le trajet piéton
+    const line = L.polyline(coords, { color: '#007bff', weight: 5, opacity: 0.85 }).addTo(this.layers.walking);
+    // Conserver localement la géométrie du dernier itinéraire pour suivi sans recalcul
+    this._currentWalkingCoords = coords.slice();
+    this._currentWalkingLine = line;
 
         // Ajuster la vue pour montrer le trajet (sans masquer la position utilisateur)
         try {
@@ -535,28 +547,45 @@ class Geo {
             const targetLat = this.followTarget.coordinates.lat;
             const targetLon = this.followTarget.coordinates.lon;
             const userPos = L.latLng(lat, lon);
-            const targetPos = L.latLng(targetLat, targetLon);
-            const distanceToTarget = userPos.distanceTo(targetPos); // en mètres
 
-            // Arrivée
-            if (distanceToTarget <= this._arrivalThreshold) {
-                this.stopFollow(true);
-                return;
+            // Si on a déjà une géométrie d'itinéraire en cache, évitons de recalculer OSRM
+            if (this._currentWalkingCoords && Array.isArray(this._currentWalkingCoords) && this._currentWalkingCoords.length > 1) {
+                // Distance au tracé
+                const distToRoute = this._distanceToPolyline(userPos, this._currentWalkingCoords);
+                // Si on est encore sur la route (pas trop dévié)
+                if (distToRoute <= this._offRouteThreshold) {
+                    // Calculer la distance restante le long de la route
+                    const remaining = this._remainingDistanceAlongPolyline(userPos, this._currentWalkingCoords);
+                    // Si restant inférieur au seuil d'arrivée, on stoppe
+                    if (remaining <= this._arrivalThreshold) {
+                        this.stopFollow(true);
+                        return;
+                    }
+                    // Mettre à jour le panneau walk-summary avec la distance restante (si présent)
+                    const $panel = document.querySelector('#info-panel');
+                    if ($panel) {
+                        const remText = remaining >= 1000 ? (remaining/1000).toFixed(2) + ' km' : Math.round(remaining) + ' m';
+                        let summary = $panel.querySelector('.walk-summary');
+                        if (!summary) {
+                            summary = document.createElement('div');
+                            summary.className = 'walk-summary';
+                            $panel.appendChild(summary);
+                        }
+                        summary.textContent = `Distance restante: ${remText}`;
+                    }
+                    // Pas besoin de recalculer l'itinéraire ; on met à jour les timestamps
+                    this._lastRouteRefreshAt = Date.now();
+                    this._lastFollowPos = { lat, lon };
+                    return;
+                }
+                // sinon on est hors route -> recalcul
             }
 
-            // Calculer déplacement depuis dernier point de rafraîchissement
-            let moved = Infinity;
-            if (this._lastFollowPos) {
-                const prev = L.latLng(this._lastFollowPos.lat, this._lastFollowPos.lon);
-                moved = prev.distanceTo(userPos);
-            }
-
+            // Si pas d'itinéraire en cache ou hors-route, on recalcule via OSRM mais throttle les appels
             const now = Date.now();
-            const needRefresh = (moved > 25) || (now - this._lastRouteRefreshAt > 5000);
-            if (needRefresh) {
-                // Rafraîchir l'itinéraire en donnant la position actuelle comme point de départ
+            if (now - this._lastRouteRefreshAt > 2000) { // minimum 2s entre requêtes
                 try {
-                    this._drawWalkingRoute(this.followTarget, { lat, lon });
+                    this._drawWalkingRoute(this.followTarget, { lat, lon }).catch(e => console.warn('Erreur rafraîchissement itinéraire', e));
                 } catch (e) { console.warn('Erreur rafraîchissement itinéraire', e); }
                 this._lastRouteRefreshAt = now;
                 this._lastFollowPos = { lat, lon };
@@ -907,6 +936,113 @@ class Geo {
         const speedMs = (speedKmh * 1000) / 3600;
         const seconds = Math.round(distanceMeters / speedMs);
         return seconds;
+    }
+
+    /* ------------------------------------------------------------------
+     * GÉOMÉTRIE UTILITAIRES (petites fonctions pour le calcul sur la route)
+     * - _latLngToXY(lat,lon, refLat) : projection equirectangular approximative
+     * - _distancePointToSegmentMeters(p, a, b) : distance perpendiculaire en mètres
+     * - _distanceToPolyline(point, coords) : distance minimale du point à la polyline
+     * - _remainingDistanceAlongPolyline(point, coords) : distance restante depuis la
+     *   projection du point jusqu'à la fin de la polyline (en mètres)
+     * Ces approximations sont suffisantes pour des distances courtes (quelques kms).
+     * ------------------------------------------------------------------ */
+
+    _latLngToXY(lat, lon, refLat) {
+        const R = 6371000; // rayon moyen Terre en m
+        const latRad = (lat * Math.PI) / 180;
+        const lonRad = (lon * Math.PI) / 180;
+        const refLatRad = (refLat * Math.PI) / 180;
+        const x = R * lonRad * Math.cos(refLatRad);
+        const y = R * latRad;
+        return { x, y };
+    }
+
+    _distancePointToSegmentMeters(p, a, b) {
+        // p,a,b: {lat,lon}
+        // projection using equirectangular approx with reference latitude = p.lat
+        const refLat = p.lat;
+        const P = this._latLngToXY(p.lat, p.lon, refLat);
+        const A = this._latLngToXY(a[0], a[1], refLat);
+        const B = this._latLngToXY(b[0], b[1], refLat);
+        const vx = B.x - A.x;
+        const vy = B.y - A.y;
+        const wx = P.x - A.x;
+        const wy = P.y - A.y;
+        const denom = vx*vx + vy*vy;
+        let t = 0;
+        if (denom > 0) t = (vx*wx + vy*wy) / denom;
+        if (t < 0) {
+            // closest to A
+            const dx = P.x - A.x; const dy = P.y - A.y;
+            return Math.sqrt(dx*dx + dy*dy);
+        } else if (t > 1) {
+            // closest to B
+            const dx = P.x - B.x; const dy = P.y - B.y;
+            return Math.sqrt(dx*dx + dy*dy);
+        } else {
+            // projection falls within segment
+            const projx = A.x + t*vx;
+            const projy = A.y + t*vy;
+            const dx = P.x - projx; const dy = P.y - projy;
+            return Math.sqrt(dx*dx + dy*dy);
+        }
+    }
+
+    _distanceToPolyline(point, coords) {
+        // point: L.LatLng or {lat,lon}; coords: array [[lat,lon], ...]
+        if (!coords || coords.length === 0) return Infinity;
+        const p = (point.lat !== undefined) ? { lat: point.lat, lon: point.lng || point.lon } : { lat: point[0], lon: point[1] };
+        let minD = Infinity;
+        for (let i = 0; i < coords.length - 1; i++) {
+            const a = coords[i];
+            const b = coords[i+1];
+            const d = this._distancePointToSegmentMeters(p, a, b);
+            if (d < minD) minD = d;
+        }
+        return minD;
+    }
+
+    _remainingDistanceAlongPolyline(point, coords) {
+        // Project point to nearest segment and compute remaining distance from that projection to end
+        if (!coords || coords.length === 0) return Infinity;
+        const p = (point.lat !== undefined) ? { lat: point.lat, lon: point.lng || point.lon } : { lat: point[0], lon: point[1] };
+        // Find best segment and projection t
+        const refLat = p.lat;
+        let best = { i: 0, t: 0, dist: Infinity, proj: null };
+        for (let i = 0; i < coords.length - 1; i++) {
+            const A = this._latLngToXY(coords[i][0], coords[i][1], refLat);
+            const B = this._latLngToXY(coords[i+1][0], coords[i+1][1], refLat);
+            const P = this._latLngToXY(p.lat, p.lon, refLat);
+            const vx = B.x - A.x; const vy = B.y - A.y;
+            const wx = P.x - A.x; const wy = P.y - A.y;
+            const denom = vx*vx + vy*vy;
+            let t = 0;
+            if (denom > 0) t = (vx*wx + vy*wy) / denom;
+            let projx, projy;
+            if (t <= 0) { projx = A.x; projy = A.y; t = 0; }
+            else if (t >= 1) { projx = B.x; projy = B.y; t = 1; }
+            else { projx = A.x + t*vx; projy = A.y + t*vy; }
+            const dx = P.x - projx; const dy = P.y - projy;
+            const d = Math.sqrt(dx*dx + dy*dy);
+            if (d < best.dist) best = { i, t, dist: d, proj: { x: projx, y: projy } };
+        }
+        // Compute remaining distance: from projection point to coords[end]
+        // Convert projection back to latlon approx by reversing _latLngToXY is non-trivial; instead compute remaining by summing distances from projection point to next vertex
+        // We approximate projection point as linear interpolation between coords[best.i] and coords[best.i+1]
+        const i = best.i;
+        const t = best.t;
+        // compute projection latlon
+        const latProj = coords[i][0] + t * (coords[i+1][0] - coords[i][0]);
+        const lonProj = coords[i][1] + t * (coords[i+1][1] - coords[i][1]);
+        let remaining = 0;
+        // distance from projection to coords[i+1]
+        remaining += L.latLng(latProj, lonProj).distanceTo( L.latLng(coords[i+1][0], coords[i+1][1]) );
+        // sum rest
+        for (let k = i+1; k < coords.length - 1; k++) {
+            remaining += L.latLng(coords[k][0], coords[k][1]).distanceTo(L.latLng(coords[k+1][0], coords[k+1][1]));
+        }
+        return remaining;
     }
 
 

@@ -124,6 +124,26 @@
     width: 260px;
 }
 
+/* Follow button in the info panel */
+.follow-btn {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.arrival-message {
+    padding: 10px;
+    background: #E6FFED;
+    color: #065F46;
+    border-radius: 8px;
+    margin-top: 8px;
+}
+
 /* Responsive rules */
 @media (max-width: 900px) {
     /* Tablet: make boxes narrower and centered */

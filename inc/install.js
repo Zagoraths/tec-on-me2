@@ -51,13 +51,19 @@ function initInstallButton () {
     console.log('PWA: application installée', evt)
     const installBtn = document.querySelector('.install-btn')
     if (installBtn) installBtn.style.display = 'none'
+    // Hide the whole install box if present (we don't want to see it inside the installed app)
+    const box = document.querySelector('.box-install')
+    if (box) box.classList.add('hidden')
     deferredPrompt = null
   })
 
   // Sur iOS/Safari, there is no beforeinstallprompt; if app already 'installed' (standalone), hide button
-  if (window.navigator.standalone === true) {
+  const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches
+  if (isStandalone) {
     const installBtn = document.querySelector('.install-btn')
     if (installBtn) installBtn.style.display = 'none'
+    const box = document.querySelector('.box-install')
+    if (box) box.classList.add('hidden')
   }
 }
 
