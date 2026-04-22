@@ -40,10 +40,6 @@ class Geo {
         this.activeMarker = null; // Pour stocker le marqueur de la position cliquée (si besoin)
         this.userMarker = null; // Marqueur de la position de l'utilisateur (ne doit jamais disparaître)
         this.clickMarker = null; // Marqueur du dernier clic sur la carte
-        this.watchId = null; // id du watchPosition pour mise à jour en temps réel
-        this.followingDestination = false; // flag indiquant qu'on suit un itinéraire vers une destination
-        this.destination = null; // {lat, lon, stop}
-        this.arrivalThreshold = 15; // seuil en mètres pour considérer qu'on est arrivé
 
         // Écouteur global pour les lignes de bus (Délégation d'événement)
         // On écoute la zone de la carte : si on clique sur un lien avec la classe 'bus-link', on trace la ligne.
@@ -153,31 +149,9 @@ class Geo {
         this.map = L.map(this.$mapBox).setView([latitude, longitude], 17);
 
         // On ajoute le "fond de carte" (les images des rues)
-        // Primary tiles (Thunderforest). If they fail (CORS / key restrictions on some devices),
-        // we automatically switch to OpenStreetMap tiles as a fallback so the map isn't left dark.
-        const thunderUrl = "https://tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=f5a6d9a8d3484637b41037978e6e1e7b";
-        const osmUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-
-        const primaryLayer = L.tileLayer(thunderUrl, { attribution: '© OpenStreetMap - TEC' });
-        const fallbackLayer = L.tileLayer(osmUrl, { attribution: '© OpenStreetMap contributors' });
-
-        primaryLayer.addTo(this.map);
-
-        // If many tile errors occur, swap to fallbackLayer once to ensure map tiles render.
-        let tileErrorCount = 0;
-        const maxTileErrorsBeforeFallback = 6;
-        primaryLayer.on('tileerror', (err) => {
-            tileErrorCount += 1;
-            // On certains appareils (Samsung/Android) le provider peut renvoyer 403/blocked
-            // ; on détecte plusieurs erreurs suivies et on bascule automatiquement.
-            if (tileErrorCount >= maxTileErrorsBeforeFallback) {
-                try {
-                    this.map.removeLayer(primaryLayer);
-                } catch (e) {}
-                fallbackLayer.addTo(this.map);
-                this._showArrivalMessage('Problème de tuiles détecté — utilisation d\'un fond alternatif', 3000);
-            }
-        });
+        L.tileLayer("https://tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=f5a6d9a8d3484637b41037978e6e1e7b", {
+            attribution: '© OpenStreetMap - TEC'
+        }).addTo(this.map);
 
         // On active nos "tiroirs" (calques) sur la carte
         this.layers.stops.addTo(this.map);
@@ -187,10 +161,6 @@ class Geo {
 
         // Marqueur fixe pour notre position initiale
         this.userMarker = L.marker([latitude, longitude], { icon: this.icons.user }).addTo(this.map);
-
-    // Démarrer le suivi en temps réel de la position utilisateur
-    // (met à jour le marqueur `this.userMarker` via watchPosition)
-    this._startUserWatch();
 
         // On charge les arrêts autour de nous
         this.loadStops(position);
@@ -444,13 +414,6 @@ class Geo {
             const h4 = $panel.querySelector('h4');
             if (h4) h4.insertAdjacentHTML('afterend', summaryHtml);
             else $panel.insertAdjacentHTML('beforeend', summaryHtml);
-
-            // Démarrer le suivi en temps réel de l'utilisateur vers cet arrêt
-            // Lorsqu'un itinéraire est tracé, on active le suivi pour afficher
-            // la position de l'utilisateur en temps réel et détecter l'arrivée.
-            try {
-                this.startFollowDestination(stop);
-            } catch (e) { /* noop */ }
         }
     }
 
@@ -761,142 +724,6 @@ class Geo {
         const speedMs = (speedKmh * 1000) / 3600;
         const seconds = Math.round(distanceMeters / speedMs);
         return seconds;
-    }
-
-    /* -------------------------------------------------------------
-     * SUIVI DE L'UTILISATEUR EN TEMPS RÉEL
-     * - _startUserWatch() : lance navigator.geolocation.watchPosition
-     * - _stopUserWatch()  : arrête le watch
-     * - startFollowDestination(stop) : active le mode suivi vers un arrêt
-     * - stopFollowDestination() : désactive le suivi
-     * - _onArrived() : appelé lorsque l'utilisateur arrive à destination
-     * - _showArrivalMessage(text, duration) : petit toast visuel
-     * ------------------------------------------------------------- */
-
-    // Démarre un watchPosition si nécessaire et met à jour le marqueur utilisateur
-    _startUserWatch() {
-        if (!navigator.geolocation) return;
-        if (this.watchId) return; // déjà en cours
-
-        this.watchId = navigator.geolocation.watchPosition((pos) => {
-            const lat = pos.coords.latitude;
-            const lon = pos.coords.longitude;
-            // sauvegarder la position
-            this.lastPosition = pos;
-
-            // Mettre à jour (ou créer) le marqueur utilisateur sans le supprimer
-            if (!this.userMarker) {
-                this.userMarker = L.marker([lat, lon], { icon: this.icons.user }).addTo(this.map);
-            } else {
-                this.userMarker.setLatLng([lat, lon]);
-            }
-
-            // Si nous suivons une destination, recentrer la carte doucement
-            if (this.followingDestination && this.destination) {
-                try {
-                    const userLatLng = L.latLng(lat, lon);
-                    const destLatLng = L.latLng(this.destination.lat, this.destination.lon);
-                    // recentrer pour suivre l'utilisateur
-                    this.map.panTo(userLatLng);
-                    // vérifier la distance restante
-                    const dist = userLatLng.distanceTo(destLatLng);
-                    if (dist <= this.arrivalThreshold) {
-                        this._onArrived();
-                    }
-                } catch (e) { console.warn('Erreur lors du suivi de destination', e); }
-            }
-        }, (err) => {
-            console.warn('watchPosition error', err);
-        }, this.optionsMap);
-    }
-
-    // Arrête le watchPosition (libère la ressource)
-    _stopUserWatch() {
-        if (this.watchId != null && navigator.geolocation) {
-            navigator.geolocation.clearWatch(this.watchId);
-            this.watchId = null;
-        }
-    }
-
-    // Active le suivi en temps réel vers un arrêt donné (objet stop attendu)
-    startFollowDestination(stop) {
-        if (!stop) return false;
-        // extraire coordonnées de l'arrêt
-        const lat = stop.coordinates && stop.coordinates.lat ? stop.coordinates.lat : (stop.lat || null);
-        const lon = stop.coordinates && stop.coordinates.lon ? stop.coordinates.lon : (stop.lon || null);
-        if (lat == null || lon == null) return false;
-
-        this.destination = { lat: lat, lon: lon, stop };
-        this.followingDestination = true;
-
-        // S'assurer que le watch est actif
-        this._startUserWatch();
-
-        // Indiquer visuellement que le suivi est activé
-        this._showArrivalMessage("Suivi de l'itinéraire activé", 2000);
-        return true;
-    }
-
-    // Désactive le suivi de destination
-    stopFollowDestination() {
-        this.followingDestination = false;
-        this.destination = null;
-        // Optionnel : on peut arrêter le watch si on ne veut plus suivre du tout
-        // this._stopUserWatch();
-        this._showArrivalMessage('Suivi désactivé', 1200);
-    }
-
-    // Appelé lorsque l'utilisateur est détecté comme arrivé à la destination
-    _onArrived() {
-        // Stopper le suivi et prévenir l'utilisateur
-        this.stopFollowDestination();
-
-        // Message clair en français
-        const message = 'Vous êtes arrivé à destination';
-        this._showArrivalMessage(message, 5000);
-
-        // Également injecter un message rapide dans le panneau d'infos si présent
-        const $panel = document.querySelector('#info-panel');
-        if ($panel) {
-            const msg = document.createElement('div');
-            msg.className = 'arrival-panel-msg';
-            msg.textContent = message;
-            msg.style.marginTop = '8px';
-            msg.style.padding = '6px';
-            msg.style.background = '#e9ffe9';
-            msg.style.border = '1px solid #c8f7c8';
-            $panel.appendChild(msg);
-            setTimeout(() => { if (msg.parentElement) msg.remove(); }, 5000);
-        }
-    }
-
-    // Petit toast / message visuel temporaire
-    _showArrivalMessage(text, duration = 4000) {
-        try {
-            const existing = document.querySelector('.arrival-toast');
-            if (existing) existing.remove();
-            const t = document.createElement('div');
-            t.className = 'arrival-toast';
-            Object.assign(t.style, {
-                position: 'fixed',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                bottom: '4.5rem',
-                background: 'white',
-                padding: '8px 12px',
-                boxShadow: '0 6px 18px rgba(0,0,0,0.12)',
-                borderRadius: '6px',
-                zIndex: 2100,
-            });
-            t.textContent = text;
-            document.body.appendChild(t);
-            setTimeout(() => { t.style.transition = 'opacity 0.3s'; t.style.opacity = '0'; setTimeout(() => { if (t.parentElement) t.remove(); }, 300); }, duration);
-        } catch (e) { console.warn('Erreur affichage message arrivée', e); }
-    }
-
-    // Public helper: suivre un arrêt (alias pratique)
-    followStop(stop) {
-        return this.startFollowDestination(stop);
     }
 
 
