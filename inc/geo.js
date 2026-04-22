@@ -163,11 +163,14 @@ class Geo {
         this.map = L.map(this.$mapBox).setView([latitude, longitude], 17);
 
         // On ajoute le "fond de carte" (les images des rues)
-        // NOTE: Thunderforest requires API keys and may be blocked on some devices or
-        // hosts; use the public OpenStreetMap tiles as a reliable fallback for mobile.
+        // Utilise le fournisseur OSM standard (communément utilisé avec Leaflet).
+        // Cela correspond au fond de carte qu'on retrouve dans les exemples Leaflet.
+        // - detectRetina active des tuiles retina si l'appareil le supporte
+        // - attribution correcte pour OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19
+            maxZoom: 19,
+            detectRetina: true,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(this.map);
 
         // On active nos "tiroirs" (calques) sur la carte
