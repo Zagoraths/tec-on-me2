@@ -1,42 +1,56 @@
 <!doctype html>
-    <html lang="fr">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <link rel="manifest" href="/manifest.json">
-            <meta name="mobile-web-app-capable" content="yes">
-            <meta name="apple-mobile-web-app-capable" content="yes">
-            <meta name="apple-mobile-web-app-title" content="TecOnMe">
-            <link rel="apple-touch-icon" href="/icons/favicon-256x256.png">
-            <title>Tec on Me</title>
-            <link rel="icon" href="/icons/favicon.ico">
-            <meta name="theme-color" content="#B12A34">
-            <meta name="apple-mobile-web-app-status-bar-style" content="#B12A34">
-            <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-            <link rel="stylesheet" href="styles/style.css">
-        </head>
-        <body>
-            <main>
-                <div class="wrapper">
-                    <form action="carte.html" class="gps gps_form">
-                    <img class="big" src="https://assets.codepen.io/87353/icon-bus-front-big.svg" alt="">
-                    <h1><strong>Choisir </strong><span>mon expérience :</span></h1>
-                    <div class="gps_form__field">
-                      <input type="radio" name="localisation" id="gps-on" value="y">
-                      <label for="gps-on">Activer la géolocalisation</label>
-                      <p><span>Et trouver les arrêts </span><span>proches de ma position.</span></p>
-                      <img src="icons/geo-gps-on.svg" alt="gps actif">
-                    </div>
-                    
-                    <div class="gps_form__field">
-                      <input type="radio" name="localisation" id="gps-off" value="n">
-                      <label for="gps-off"><span>Utiliser l'adresse</span><span> par défaut</span></label>
-                      <p>L'adresse par défaut est utilisée pour me situer.</p>
-                      <img src="icons/geo-gps-off.svg" alt="gps actif">
-                    </div>
-                    <button type="submit">Continuer</button>
-                  </form>
-                  </div>
-            </main>
-        </body>
-    </html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="TecOnMe" />
+    <link rel="apple-touch-icon" href="/icons/favicon-256x256.png" />
+    <title>Tec on Me</title>
+    <link rel="icon" href="/icons/favicon.ico" />
+    <meta name="theme-color" content="#B12A34" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="#B12A34" />
+    <script
+      defer
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <link rel="stylesheet" href="styles/style.css" />
+  </head>
+  <body>
+    <main>
+      <div class="wrapper">
+        <form action="carte.html" class="gps gps_form">
+          <img
+            class="big"
+            src="https://assets.codepen.io/87353/icon-bus-front-big.svg"
+            alt=""
+          />
+          <h1><strong>Choisir </strong><span>mon expérience :</span></h1>
+          <div class="gps_form__field">
+            <input type="radio" name="localisation" id="gps-on" value="y" />
+            <label for="gps-on">Activer la géolocalisation</label>
+            <p>
+              <span>Et trouver les arrêts </span
+              ><span>proches de ma position.</span>
+            </p>
+            <img src="icons/geo-gps-on.svg" alt="gps actif" />
+          </div>
+
+          <div class="gps_form__field">
+            <input type="radio" name="localisation" id="gps-off" value="n" />
+            <label for="gps-off"
+              ><span>Utiliser l'adresse</span><span> par défaut</span></label
+            >
+            <p>L'adresse par défaut est utilisée pour me situer.</p>
+            <img src="icons/geo-gps-off.svg" alt="gps actif" />
+          </div>
+          <button type="submit">Continuer</button>
+        </form>
+      </div>
+    </main>
+  </body>
+</html>
