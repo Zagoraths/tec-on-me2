@@ -283,12 +283,15 @@ class Geo {
                         if (!stopShapeId) stopShapeId = shapeId;
                         const lineFavBtn = document.createElement('button');
                         lineFavBtn.className = 'fav-btn';
+                        // Déterminer un label lisible pour la ligne (court si possible)
+                        const lineNumber = bus.route_short_name || bus.route_id || '';
+                        const lineName = bus.route_long_name || '';
                         // Affiche un texte contextualisé : supprimer si déjà en favori, sinon ajouter
                         lineFavBtn.textContent = this.isFavorite(shapeId) ? 'Retirer des favoris' : 'Ajouter aux favoris';
                         // Ne pas désactiver : on permet le toggle (ajout / suppression)
                         lineFavBtn.addEventListener('click', (e) => {
                             e.preventDefault();
-                            const result = this.toggleFavorite(shapeId);
+                            const result = this.toggleFavorite(shapeId, lineNumber, lineName);
                             if (result === 'added') {
                                 lineFavBtn.textContent = 'Retirer des favoris';
                             } else if (result === 'removed') {
@@ -448,16 +451,40 @@ class Geo {
     isFavorite(id) {
         if (!id) return false;
         const fav = this._getFavorites();
-        return fav.indexOf(id) !== -1;
+        return fav.some(item => {
+            if (!item) return false;
+            if (typeof item === 'string') return item === id;
+            if (typeof item === 'object' && item.id) return String(item.id) === String(id);
+            return false;
+        });
     }
 
-    // Ajoute un id aux favoris si non présent (évite les doublons)
+    // Ajoute un favori {id,label} si non présent (évite les doublons)
+    // Ajoute un favori {id,number,name} si non présent (évite les doublons)
+    // Accepte soit (id, number, name), soit un objet {id, number, name}
     // Retourne true si ajouté, false si déjà présent ou erreur
-    addFavorite(id) {
+    addFavorite(idOrObj, number, name) {
+        if (!idOrObj) return false;
+        let id = null;
+        let num = '';
+        let nm = '';
+
+        if (typeof idOrObj === 'object') {
+            id = String(idOrObj.id || '');
+            num = idOrObj.number || idOrObj.num || '';
+            nm = idOrObj.name || idOrObj.label || '';
+        } else {
+            id = String(idOrObj);
+            num = number || '';
+            nm = name || '';
+        }
         if (!id) return false;
+
         const fav = this._getFavorites();
-        if (fav.indexOf(id) !== -1) return false; // déjà
-        fav.push(id);
+        if (fav.some(item => (typeof item === 'string' ? item === id : String(item.id) === String(id)))) return false; // déjà
+
+        // push as object to store number and name
+        fav.push({ id: id, number: num, name: nm });
         const saved = this._saveFavorites(fav);
         // Mettre à jour le panneau si il est affiché
         if (saved && this._favoritesPanel) this.updateFavoritesPanel();
@@ -469,7 +496,7 @@ class Geo {
     removeFavorite(id) {
         if (!id) return false;
         const fav = this._getFavorites();
-        const idx = fav.indexOf(id);
+        const idx = fav.findIndex(item => (typeof item === 'string' ? item === id : String(item.id) === String(id)));
         if (idx === -1) return false; // pas présent
         fav.splice(idx, 1);
         const saved = this._saveFavorites(fav);
@@ -477,15 +504,31 @@ class Geo {
         return saved;
     }
 
-    // Bascule l'état favoris d'un id : ajoute si absent, supprime s'il est présent.
+    // Bascule l'état favoris : accepte soit (id) / (id, number, name) ou un objet {id,number,name}
     // Retourne 'added' | 'removed' | false (en cas d'erreur).
-    toggleFavorite(id) {
+    toggleFavorite(idOrObj, number, name) {
+        if (!idOrObj) return false;
+        // Si un objet est passé en premier paramètre
+        if (typeof idOrObj === 'object') {
+            const id = String(idOrObj.id || '');
+            if (!id) return false;
+            if (this.isFavorite(id)) {
+                const removed = this.removeFavorite(id);
+                return removed ? 'removed' : false;
+            } else {
+                const added = this.addFavorite(idOrObj);
+                return added ? 'added' : false;
+            }
+        }
+
+        // Sinon on a un id en premier param
+        const id = String(idOrObj);
         if (!id) return false;
         if (this.isFavorite(id)) {
             const removed = this.removeFavorite(id);
             return removed ? 'removed' : false;
         } else {
-            const added = this.addFavorite(id);
+            const added = this.addFavorite(id, number, name);
             return added ? 'added' : false;
         }
     }
@@ -590,7 +633,17 @@ class Geo {
             return;
         }
 
-        fav.forEach(id => {
+        fav.forEach(item => {
+            const id = (typeof item === 'string') ? item : String(item.id || '');
+            const number = (typeof item === 'object' && item.number) ? item.number : '';
+            const name = (typeof item === 'object' && item.name) ? item.name : '';
+            // texte affiché : si on a un numéro et un nom -> "numéro — nom", sinon afficher ce qu'on a
+            let text = '';
+            if (number && name) text = `${number} — ${name}`;
+            else if (number) text = `${number}`;
+            else if (name) text = `${name}`;
+            else text = id;
+
             const li = document.createElement('li');
             li.style.display = 'flex';
             li.style.justifyContent = 'space-between';
@@ -599,8 +652,9 @@ class Geo {
 
             const a = document.createElement('a');
             a.href = '#';
-            a.textContent = id;
+            a.textContent = text;
             a.style.flex = '1';
+            a.dataset.favId = id;
             a.addEventListener('click', (e) => {
                 e.preventDefault();
                 this._handleFavoriteSelect(id);
@@ -636,7 +690,7 @@ class Geo {
             // trouver l'élément correspondant
             const anchors = this._favoritesPanel.querySelectorAll('.favorites-list a');
             anchors.forEach(a => {
-                if (a.textContent === id) a.parentElement.classList.add('selected');
+                if (a.dataset && a.dataset.favId === String(id)) a.parentElement.classList.add('selected');
             });
         }
     }
