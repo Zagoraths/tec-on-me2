@@ -54,6 +54,13 @@ class Geo {
         this.activeMarker = null; // Pour stocker le marqueur de la position cliquée (si besoin)
         this.userMarker = null; // Marqueur de la position de l'utilisateur (ne doit jamais disparaître)
         this.clickMarker = null; // Marqueur du dernier clic sur la carte
+    // Suivi en temps réel
+    this._watchId = null;            // id retourné par navigator.geolocation.watchPosition
+    this.followTarget = null;        // arrêt cible lorsqu'on suit un itinéraire
+    this.following = false;          // booléen indiquant si l'on suit une cible
+    this._lastRouteRefreshAt = 0;    // timestamp pour throttling des requêtes OSRM
+    this._lastFollowPos = null;      // position précédente lors du suivi (pour calculer déplacement)
+    this._arrivalThreshold = 20;     // en mètres: distance pour considérer qu'on est arrivé
 
         // Écouteur global pour les lignes de bus (Délégation d'événement)
         // On écoute la zone de la carte : si on clique sur un lien avec la classe 'bus-link', on trace la ligne.
@@ -347,6 +354,23 @@ class Geo {
         // On utilise OSRM public : router.project-osrm.org
         try {
             await this._drawWalkingRoute(stop);
+            // Ajouter un bouton pour démarrer/arrêter le suivi vers cet arrêt
+            const followBtn = document.createElement('button');
+            followBtn.className = 'follow-btn';
+            followBtn.textContent = this.following ? 'Arrêter le suivi' : 'Commencer le suivi';
+            Object.assign(followBtn.style, { marginTop: '8px', padding: '8px 10px', borderRadius: '8px', background: '#007bff', color: 'white', border: 'none', cursor: 'pointer' });
+            // Si on clique, on démarre/arrête le suivi
+            followBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (!this.following) {
+                    const started = this.startFollowToStop(stop);
+                    if (started) followBtn.textContent = 'Arrêter le suivi';
+                } else {
+                    this.stopFollow(false);
+                    followBtn.textContent = 'Commencer le suivi';
+                }
+            });
+            $panel.appendChild(followBtn);
             // Après tracé, extraire distance/durée si disponible
             // L'info sera ajoutée dans le panneau par _drawWalkingRoute
         } catch (err) {
@@ -357,6 +381,8 @@ class Geo {
         $panel.querySelector('.close-panel').addEventListener('click', () => {
             $panel.classList.add('hidden');
             this.layers.walking.clearLayers(); // On efface le tracé bleu aussi
+            // Si on était en suivi, on l'arrête (fermeture du panneau implique arrêt du suivi)
+            if (this.following) this.stopFollow(false);
         });
     });
 }
@@ -368,9 +394,17 @@ class Geo {
      * avec la distance et la durée.
      */
     async _drawWalkingRoute(stop) {
-        // Déterminer la position de départ : préférence pour this.userMarker
+        // Déterminer la position de départ : on utilise en priorité la position fournie
+        // (utile pour le suivi en temps réel), sinon on utilise le marqueur utilisateur
+        // ou la dernière position connue.
         let startLat, startLon;
-        if (this.userMarker && this.userMarker.getLatLng) {
+        // Support d'appel optionnel : _drawWalkingRoute(stop, {lat, lon})
+        const args = Array.from(arguments);
+        const startCoords = args[1] || null;
+        if (startCoords && startCoords.lat && startCoords.lon) {
+            startLat = startCoords.lat;
+            startLon = startCoords.lon;
+        } else if (this.userMarker && this.userMarker.getLatLng) {
             const latlng = this.userMarker.getLatLng();
             startLat = latlng.lat;
             startLon = latlng.lng;
@@ -412,7 +446,7 @@ class Geo {
             this.map.fitBounds(bounds, { padding: [50, 50] });
         } catch (e) { /* noop */ }
 
-        // Mettre à jour le panneau d'infos avec distance et durée
+    // Mettre à jour le panneau d'infos avec distance et durée
         const $panel = document.querySelector('#info-panel');
         if ($panel) {
             const dist = route.distance; // en mètres
@@ -435,6 +469,135 @@ class Geo {
             if (h4) h4.insertAdjacentHTML('afterend', summaryHtml);
             else $panel.insertAdjacentHTML('beforeend', summaryHtml);
         }
+        // retourner quelques infos utiles pour l'appelant (utilisé par le suivi)
+        return { distance: route.distance, duration: route.duration, geojson: route.geometry };
+    }
+
+    /* ------------------------------------------------------------------
+     * SUIVI EN TEMPS RÉEL
+     * - startFollowToStop(stop) : démarre la géolocalisation en continu et
+     *   réactualise l'itinéraire quand nécessaire.
+     * - _onFollowPosition(pos) : callback du watchPosition
+     * - stopFollow(arrived) : arrête le suivi et affiche message si arrivé
+     * ------------------------------------------------------------------ */
+
+    startFollowToStop(stop) {
+        if (!navigator.geolocation) {
+            console.warn('Géolocalisation non disponible');
+            return false;
+        }
+        // Sauvegarder la cible
+        this.followTarget = stop;
+        this.following = true;
+        this._lastRouteRefreshAt = 0;
+        this._lastFollowPos = null;
+
+        // Demander la position en continu
+        try {
+            this._watchId = navigator.geolocation.watchPosition(
+                (pos) => this._onFollowPosition(pos),
+                (err) => console.warn('Erreur watchPosition', err),
+                { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
+            );
+        } catch (e) {
+            console.warn('Impossible de démarrer le suivi', e);
+            this._watchId = null;
+            this.following = false;
+            return false;
+        }
+
+        // Optionnel : recentrer la carte sur l'utilisateur pour commencer
+        if (this.userMarker && this.userMarker.getLatLng) {
+            this.map.panTo(this.userMarker.getLatLng());
+        }
+
+        return true;
+    }
+
+    _onFollowPosition(pos) {
+        if (!pos || !pos.coords) return;
+        this.lastPosition = pos;
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+
+        // Mettre à jour le marqueur utilisateur en temps réel
+        if (this.userMarker && this.userMarker.setLatLng) {
+            this.userMarker.setLatLng([lat, lon]);
+        } else {
+            this.userMarker = L.marker([lat, lon], { icon: this.icons.user }).addTo(this.map);
+        }
+
+        // Faire suivre la carte doucement
+        try { this.map.panTo([lat, lon]); } catch (e) { /* noop */ }
+
+        // Si on suit une cible, vérifier la distance et rafraîchir l'itinéraire si besoin
+        if (this.following && this.followTarget) {
+            const targetLat = this.followTarget.coordinates.lat;
+            const targetLon = this.followTarget.coordinates.lon;
+            const userPos = L.latLng(lat, lon);
+            const targetPos = L.latLng(targetLat, targetLon);
+            const distanceToTarget = userPos.distanceTo(targetPos); // en mètres
+
+            // Arrivée
+            if (distanceToTarget <= this._arrivalThreshold) {
+                this.stopFollow(true);
+                return;
+            }
+
+            // Calculer déplacement depuis dernier point de rafraîchissement
+            let moved = Infinity;
+            if (this._lastFollowPos) {
+                const prev = L.latLng(this._lastFollowPos.lat, this._lastFollowPos.lon);
+                moved = prev.distanceTo(userPos);
+            }
+
+            const now = Date.now();
+            const needRefresh = (moved > 25) || (now - this._lastRouteRefreshAt > 5000);
+            if (needRefresh) {
+                // Rafraîchir l'itinéraire en donnant la position actuelle comme point de départ
+                try {
+                    this._drawWalkingRoute(this.followTarget, { lat, lon });
+                } catch (e) { console.warn('Erreur rafraîchissement itinéraire', e); }
+                this._lastRouteRefreshAt = now;
+                this._lastFollowPos = { lat, lon };
+            }
+        }
+    }
+
+    stopFollow(arrived = false) {
+        if (this._watchId && navigator.geolocation && navigator.geolocation.clearWatch) {
+            navigator.geolocation.clearWatch(this._watchId);
+            this._watchId = null;
+        }
+        this.following = false;
+        this.followTarget = null;
+        this._lastFollowPos = null;
+
+        // Si indiqué, afficher un message d'arrivée
+        if (arrived) {
+            this._showArrivalMessage();
+        }
+        // Mettre à jour le texte du bouton de suivi si présent dans le panneau
+        const $panel = document.querySelector('#info-panel');
+        if ($panel) {
+            const btn = $panel.querySelector('.follow-btn');
+            if (btn) btn.textContent = 'Commencer le suivi';
+        }
+    }
+
+    _showArrivalMessage() {
+        const $panel = document.querySelector('#info-panel');
+        if (!$panel) return;
+        // Assurer que le panneau est visible
+        $panel.classList.remove('hidden');
+        // Créer le message d'arrivée
+        const msg = document.createElement('div');
+        msg.className = 'arrival-message';
+        msg.textContent = 'Vous êtes arrivé à destination';
+        Object.assign(msg.style, { padding: '10px', background: '#E6FFED', color: '#065F46', borderRadius: '8px', marginTop: '8px' });
+        $panel.appendChild(msg);
+        // Supprimer après quelques secondes
+        setTimeout(() => { try { msg.remove(); } catch (e) {} }, 6000);
     }
 
     /* ---------------------------------------------
