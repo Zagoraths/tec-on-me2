@@ -153,9 +153,31 @@ class Geo {
         this.map = L.map(this.$mapBox).setView([latitude, longitude], 17);
 
         // On ajoute le "fond de carte" (les images des rues)
-        L.tileLayer("https://tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=f5a6d9a8d3484637b41037978e6e1e7b", {
-            attribution: '© OpenStreetMap - TEC'
-        }).addTo(this.map);
+        // Primary tiles (Thunderforest). If they fail (CORS / key restrictions on some devices),
+        // we automatically switch to OpenStreetMap tiles as a fallback so the map isn't left dark.
+        const thunderUrl = "https://tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=f5a6d9a8d3484637b41037978e6e1e7b";
+        const osmUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+        const primaryLayer = L.tileLayer(thunderUrl, { attribution: '© OpenStreetMap - TEC' });
+        const fallbackLayer = L.tileLayer(osmUrl, { attribution: '© OpenStreetMap contributors' });
+
+        primaryLayer.addTo(this.map);
+
+        // If many tile errors occur, swap to fallbackLayer once to ensure map tiles render.
+        let tileErrorCount = 0;
+        const maxTileErrorsBeforeFallback = 6;
+        primaryLayer.on('tileerror', (err) => {
+            tileErrorCount += 1;
+            // On certains appareils (Samsung/Android) le provider peut renvoyer 403/blocked
+            // ; on détecte plusieurs erreurs suivies et on bascule automatiquement.
+            if (tileErrorCount >= maxTileErrorsBeforeFallback) {
+                try {
+                    this.map.removeLayer(primaryLayer);
+                } catch (e) {}
+                fallbackLayer.addTo(this.map);
+                this._showArrivalMessage('Problème de tuiles détecté — utilisation d\'un fond alternatif', 3000);
+            }
+        });
 
         // On active nos "tiroirs" (calques) sur la carte
         this.layers.stops.addTo(this.map);
