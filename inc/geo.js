@@ -11,6 +11,20 @@
  * =============================================================================
  */
 
+/**
+ * RESPONSIVE & UX NOTES
+ * - The app is adapted for mobile/tablet/desktop via CSS only (see styles/map.css).
+ * - JS behavior is unchanged: we keep map logic, markers and panels. CSS repositions
+ *   controls (distance slider, favorites panel, info panel) to improve touch
+ *   ergonomics on small screens (larger tap targets, bottom-accessible panels).
+ * - We avoided structural HTML changes to preserve existing selectors used by JS.
+ * - Favorites now store structured objects {id, number, name} to let the UI show
+ *   "Numéro — Nom" in the favorites panel; code still supports legacy string-only
+ *   favorites for backward compatibility.
+ * - Performance choices: images used in alerts are lazy-loaded; heavy layout
+ *   changes are done via CSS media queries to avoid runtime JS repositioning.
+ */
+
 class Geo {
     /**
      * 1. CONSTRUCTEUR & CONFIGURATION

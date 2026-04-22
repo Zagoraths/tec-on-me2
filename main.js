@@ -1,4 +1,7 @@
 // gestion de la carte
+// Notes: main.js keeps minimal logic; resources (Leaflet, main) are loaded with
+// `defer`/module so parsing/rendering on mobile is not blocked. Responsive
+// adaptations are handled in CSS (`styles/map.css`) to avoid JS repositioning.
 import {Geo} from './inc/geo.js'
 //Gestion du bouton d'installation
 import './inc/install.js'
