@@ -1,9 +1,12 @@
 /* CSS pour la carte */
-#map { 
+#map {
+    /* Ensure a light neutral background so a failed tile load doesn't appear as a
+       solid black rectangle on small devices. Tiles should overlay this background. */
+    background-color: #f3f4f6;
     height: 100vh;
-    border: 1px solid black;
-    transition: all 2s;
- }
+    border: 1px solid rgba(0,0,0,0.08);
+    transition: all 0.3s ease;
+}
 /*
  Responsive rationale:
  - Keep the map full viewport on desktop, but ensure UI controls (panels, buttons)

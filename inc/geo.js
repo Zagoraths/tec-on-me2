@@ -163,8 +163,11 @@ class Geo {
         this.map = L.map(this.$mapBox).setView([latitude, longitude], 17);
 
         // On ajoute le "fond de carte" (les images des rues)
-        L.tileLayer("https://tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=f5a6d9a8d3484637b41037978e6e1e7b", {
-            attribution: '© OpenStreetMap - TEC'
+        // NOTE: Thunderforest requires API keys and may be blocked on some devices or
+        // hosts; use the public OpenStreetMap tiles as a reliable fallback for mobile.
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
         }).addTo(this.map);
 
         // On active nos "tiroirs" (calques) sur la carte

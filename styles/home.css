@@ -5,7 +5,9 @@
 
 body {
   margin: 0;
-  background: #000E;
+  /* Use a light neutral background to avoid a dark backdrop behind the map on mobile
+     (the previous value could render as a semi-opaque black on some devices). */
+  background: #F5F5F2;
 }
 
 .phone {
